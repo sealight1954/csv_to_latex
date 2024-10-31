@@ -86,7 +86,26 @@ class RunCsvToLatex():
         self.is_draw_tikz_parent_relationship = self.args_dict["is_draw_tikz_parent_relationship"]
         if self.is_draw_tikz_parent_relationship:
             assert self.args_dict["output_type"] in ["tikz", "tikz_tex"], f"--is_draw_tikz_parent_relationship is supported for tikz output_type, but not for {self.args_dict['output_type']}."
+        self.example_type_lst = [
+            "Declaration",
+            "Expression",
+        ]
+        self.tex_header = r"""\documentclass[dvipdfmx,a4paper]{jsarticle}% ドライバ dvipdfmx を指定する
+\usepackage[svgnames]{xcolor}% tikzより前に読み込む必要あり
+\usepackage{tikz}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{booktabs,longtable}
 
+\begin{document}"""
+#         self.footer = r"""\bibliographystyle{abbrv}
+# \bibliography{reference}
+
+# \end{document}
+# """
+        self.tex_footer = r"""
+\end{document}
+"""
         pass
 
     def run(self):
@@ -95,9 +114,47 @@ class RunCsvToLatex():
         df_topic = pd.read_csv(self.args_dict["input_topics_filepath"])
         df_ex_ref = pd.merge(df_example, df_reference, how="left", on="reference_id")
         df_ex_ref_topic = pd.merge(df_ex_ref, df_topic, how="left", on="topic_id")
+        f = open(
+            os.path.join(self.out_dir, "out.tex"),
+            "w"
+        )
+        f.write(self.tex_header)
+
         for name, group in df_ex_ref_topic.groupby("topic_id"):
+            # なかった時の対処？
+            # TODO: exampleのないtopicは列挙されない。
+            topic_dict = df_topic[df_topic["topic_id"] == name].iloc[0].to_dict()
+            topic_title = topic_dict["topic_title"]
+            # topic_name = df_topic[df_topic["topic_id"] == name]["topic_title"].values[0]
+            f.write(f"\\section{{{topic_title}}}\n")
+            print(f"{topic_title=}")
+
+            columns_to_show_in_topic_table = ["example_type", "example_word", "reference_title", "page_or_section", "example_description_ja"]
+            print(group[columns_to_show_in_topic_table].to_latex())
+            f.write(group[columns_to_show_in_topic_table].rename(columns=lambda a: a.replace("_", "\_")).to_latex())
+            for example_type in self.example_type_lst:
+                print(f"{example_type=}")
+                df_example_per_type = group[group["example_type"]==example_type]
+                # ここで出すか、example_type絞らずに出すか。
+                # df_example_per_type[["example_word", "reference_title", "page_or_section", "example_description_ja"]].to_latex()
+                if df_example_per_type.empty:
+                    print("Empty")
+                    continue
+                f.write(f"\\subsection{{{example_type} of {topic_title}}}\n")
+                for ridx, row in df_example_per_type.iterrows():
+                    f.write(f"\\paragraph{{{row["example_word"]}}}\n")
+                    f.write(f"""
+reference from {row['reference_id']}.
+excerpts: {row['excerpts']},
+translation: {row['translation']},
+"""
+                    )
+                    pass
+
             pass
         pass
+        f.write(self.tex_footer)
+        f.close()
 
 
 if __name__ == "__main__":
