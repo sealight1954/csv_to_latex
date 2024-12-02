@@ -4,47 +4,48 @@ import pandas as pd
 import numpy as np
 import json
 import enum
+import codecs
 
 from datetime import datetime
 
 class DataFrameColumnNames(enum.Enum):
     topic_number=0,
-    topic_id=enum.auto(),
-    topic_title=enum.auto(),
-    topic_category=enum.auto(),
-    topic_list_of_words=enum.auto(),
-    topic_description_ja=enum.auto(),
-    topic_description_en=enum.auto(),
-    topic_notes=enum.auto(),
-    topic_registerer_name=enum.auto(),
-    topic_registered_date=enum.auto(),
-    topic_updated_date=enum.auto(),
-    # notes_private=enum.auto()
+    topic_id=enum.auto()
+    topic_title=enum.auto()
+    topic_category=enum.auto()
+    topic_list_of_words=enum.auto()
+    topic_description_ja=enum.auto()
+    topic_description_en=enum.auto()
+    topic_notes=enum.auto()
+    topic_registerer_name=enum.auto()
+    topic_registered_date=enum.auto()
+    topic_updated_date=enum.auto()
+    topic_notes_private=enum.auto()
     # Reference
-    reference_number=enum.auto(),
-    reference_id=enum.auto(),
-    reference_title=enum.auto(),
-    reference_author=enum.auto(),
-    reference_organization=enum.auto(),
-    reference_type=enum.auto(),
-    reference_description_ja=enum.auto(),
-    reference_description_en=enum.auto(),
-    reference_year=enum.auto(),
-    reference_date=enum.auto(),
-    reference_publication_type=enum.auto(),
-    reference_citation=enum.auto(),
+    reference_number=enum.auto()
+    reference_id=enum.auto()
+    reference_title=enum.auto()
+    reference_author=enum.auto()
+    reference_organization=enum.auto()
+    reference_type=enum.auto()
+    reference_description_ja=enum.auto()
+    reference_description_en=enum.auto()
+    reference_year=enum.auto()
+    reference_date=enum.auto()
+    reference_publication_type=enum.auto()
+    reference_citation=enum.auto()
     reference_notes=enum.auto()
     # Example
-    example_number=enum.auto(),
+    example_number=enum.auto()
     # topic_id, ExampleからTopicを参照
     # reference_id, ExampleからReferenceを参照
-    example_type=enum.auto(),
-    example_word=enum.auto(),
-    example_page_or_section=enum.auto(),
-    example_excerpts=enum.auto(),
-    example_translation=enum.auto(),
-    example_description_ja=enum.auto(),
-    example_description_en=enum.auto(),
+    example_type=enum.auto()
+    example_word=enum.auto()
+    example_page_or_section=enum.auto()
+    example_excerpts=enum.auto()
+    example_translation=enum.auto()
+    example_description_ja=enum.auto()
+    example_description_en=enum.auto()
     example_notes=enum.auto()
 
 
@@ -129,16 +130,28 @@ def get_parser_csv_to_latex():
         default="",
         help="tex接尾辞(postfix)テンプレートのファイルパス"
     )
+    parser.add_argument(
+        "--example_type_values_comma_separated",
+        type=str,
+        default="Declaration,Expression",
+        help="example_typeの取りうる値をカンマ(,)区切りの文字列で指定"
+    )
     return parser
 
 def generate_table(data_frame, columns_to_show=None, table_title="") -> str:
     if columns_to_show is not None:
         data_frame = data_frame[columns_to_show]
-    table_str = f"""\\begin{{table}}[hbp]
+    # TODO: 表に`llll`や`example-description-ja`が登場しない前提。
+    # TODO: example-description-ja以外の列の対応
+    # generate_tableは他の種類のテーブルにも対応できるようにするか
+    table_str = f"""\\begin{{table}}[h!bp]
 \\caption{{{table_title}}}
-{data_frame.rename(columns=lambda a: a.replace("_", "-")).to_latex().replace("lllll", "lC{2cm}C{3cm}C{2cm}C{3cm}")}
+\\centering
+{data_frame.rename(columns=lambda a: a.replace("_", "-")).to_latex().replace("example-description-ja", "\multicolumn{1}{c}{example-description-ja}").replace("llll", "R{3mm}|C{25mm}|C{35mm}|L{22em}")}
 \\end{{table}}
 """
+# {data_frame.rename(columns=lambda a: a.replace("_", "-")).to_latex().replace("llll", "C{2cm}C{3cm}C{2cm}C{3cm}")}
+    
     return table_str
 
 def generate_bib_misc(bib_id="", author="", url="", title="", year="", organization="") -> str:
@@ -184,14 +197,15 @@ class RunCsvToLatex():
                 datetime.now().strftime("%Y%m%d%H%M%S")
             )
         os.makedirs(self.out_dir, exist_ok=True)
-        self.example_type_lst = [
-            "Declaration",
-            "Expression",
-        ]
-        self.tex_header = r"""\documentclass[dvipdfmx,a4paper]{article}% ドライバ dvipdfmx を指定する
-\usepackage[svgnames]{xcolor}% tikzより前に読み込む必要あり
-\usepackage{tikz}
-\usepackage{url}
+        # self.example_type_lst = [
+        #     "Declaration",
+        #     "Expression",
+        # ]
+
+        self.example_type_lst = self.args_dict["example_type_values_comma_separated"].split(",")
+        self.tex_header = r"""\documentclass[dvipdfmx,a4paper]{jarticle}% ドライバ dvipdfmx を指定する
+\usepackage[hyphens]{url}
+\usepackage[hidelinks]{hyperref}
 \usepackage{amsmath}
 \usepackage{booktabs,longtable}
 % https://tex.stackexchange.com/questions/286950/how-to-create-a-table-with-fixed-column-widths
@@ -235,9 +249,9 @@ class RunCsvToLatex():
         df_reference = pd.read_csv(self.args_dict["input_references_filepath"])
         # df_reference["reference_title_with_citation"] = df_reference.apply(lambda x: f"{x[DataFrameColumnNames.reference_title.name]}\\cite{{{x[DataFrameColumnNames.reference_id.name]}}}", axis=1)
         bib_str = generate_reference_bib(df_reference)
-        with open(os.path.join(
+        with codecs.open(os.path.join(
             self.out_dir, "reference.bib"
-        ), "w") as f:
+        ), "w", "utf-8") as f:
             f.write(bib_str)
         df_topic = pd.read_csv(self.args_dict["input_topics_filepath"])
         df_ex_ref = pd.merge(df_example, df_reference, how="left", on=DataFrameColumnNames.reference_id.name)
@@ -246,24 +260,25 @@ class RunCsvToLatex():
         df_ex_ref_topic["reference_details"] = df_ex_ref_topic.apply(lambda x: f"{x[DataFrameColumnNames.example_page_or_section.name]} of {x[DataFrameColumnNames.reference_title.name]}\\cite{{{x[DataFrameColumnNames.reference_id.name]}}}", axis=1)
 
 
-        f = open(
+        f = codecs.open(
             os.path.join(self.out_dir, "out.tex"),
-            "w"
+            "w", "utf-8"
         )
         f.write(self.tex_header)
 
-        for name, group in df_ex_ref_topic.groupby(DataFrameColumnNames.topic_id.name):
+        for name, group in df_ex_ref_topic.groupby(DataFrameColumnNames.topic_number.name):
             # なかった時の対処？
             # TODO: exampleのないtopicは列挙されない。
-            topic_dict = df_topic[df_topic[DataFrameColumnNames.topic_id.name] == name].iloc[0].to_dict()
+            topic_dict = df_topic[df_topic[DataFrameColumnNames.topic_number.name] == name].iloc[0].to_dict()
             topic_title = topic_dict[DataFrameColumnNames.topic_title.name]
             # topic_name = df_topic[df_topic[DataFrameColumnNames.topic_id.name] == name][DataFrameColumnNames.topic_title.name].values[0]
             f.write(f"\\section{{{topic_title}}}\n")
             # f.write(f"\\section{{{topic_title} from {topic_dict[DataFrameColumnNames.reference_title.name]}\\citation{{{topic_dict[DataFrameColumnNames.reference_id.name]}}}}}\n")
             print(f"{topic_title=}")
             f.write(f"""
-\\paragraph{{Topic Title}} Topic-No.{topic_dict[DataFrameColumnNames.topic_number.name]} {topic_dict[DataFrameColumnNames.topic_title.name]}
-\\paragraph{{List of Words}} {topic_dict[DataFrameColumnNames.topic_list_of_words.name]}
+\\paragraph{{Topic Number}} {topic_dict[DataFrameColumnNames.topic_number.name]}
+\\paragraph{{Topic Title}} {topic_dict[DataFrameColumnNames.topic_title.name]}
+\\paragraph{{List of Words}} {topic_dict[DataFrameColumnNames.topic_list_of_words.name].replace(",", ", ")}
 \\paragraph{{Category}} {topic_dict[DataFrameColumnNames.topic_category.name]}
 \\paragraph{{Description}} {topic_dict[DataFrameColumnNames.topic_description_ja.name]}\\\\{topic_dict[DataFrameColumnNames.topic_description_en.name]}
 \\paragraph{{Registerer Name}} {topic_dict[DataFrameColumnNames.topic_registerer_name.name]}
@@ -272,10 +287,12 @@ class RunCsvToLatex():
             )
 
 
-            columns_to_show_in_topic_table = [DataFrameColumnNames.example_type.name, DataFrameColumnNames.example_word.name, "reference_details", DataFrameColumnNames.example_description_ja.name]
+            columns_to_show_in_topic_table = [DataFrameColumnNames.example_word.name, "reference_details", DataFrameColumnNames.example_description_ja.name]
             print(group[columns_to_show_in_topic_table].to_latex())
-
-            f.write(generate_table(data_frame=group, columns_to_show=columns_to_show_in_topic_table, table_title=f"Example list of \"{topic_title}\""))
+            for example_type_name, example_type_group in group.groupby(DataFrameColumnNames.example_type.name):
+                f.write(generate_table(data_frame=example_type_group,
+                                       columns_to_show=columns_to_show_in_topic_table,
+                                       table_title=f"{example_type_name} list of \"{topic_title}\""))
             # f.write(group[columns_to_show_in_topic_table].rename(columns=lambda a: a.replace("_", "\_")).to_latex())
             for example_type in self.example_type_lst:
                 print(f"{example_type=}")
@@ -287,13 +304,14 @@ class RunCsvToLatex():
                     continue
                 f.write(f"\\subsection{{{example_type} list of {topic_title}}}\n")
                 for ridx, row in df_example_per_type.iterrows():
-                    f.write(f"\\subsubsection{{{row[DataFrameColumnNames.example_word.name]} from {row[DataFrameColumnNames.example_page_or_section.name]} of {row[DataFrameColumnNames.reference_title.name]}\\cite{{{row[DataFrameColumnNames.reference_id.name]}}}}}\n")
+                    f.write(f"\\subsubsection{{\"{row[DataFrameColumnNames.example_word.name]}\" from \"{row[DataFrameColumnNames.example_page_or_section.name]}\" of \"{row[DataFrameColumnNames.reference_title.name]}\"\\cite{{{row[DataFrameColumnNames.reference_id.name]}}}}}\n")
                     # f.write(f"\\subsubsection{{{row[DataFrameColumnNames.example_word.name]}}}\n")
                     f.write(f"""
-\\paragraph{{Example Word}} No.{row[DataFrameColumnNames.example_number.name]} {row[DataFrameColumnNames.example_word.name]}
-\\paragraph{{Reference}} Reference from {row['reference_title_with_citation']} {row[DataFrameColumnNames.example_page_or_section.name]}.
-\\paragraph{{Excerpts}} {row[DataFrameColumnNames.example_excerpts.name]}
-\\paragraph{{Translation}} {row[DataFrameColumnNames.example_translation.name]}
+\\paragraph{{Example Number}} {row[DataFrameColumnNames.example_number.name]}
+\\paragraph{{Example Word}} \"{row[DataFrameColumnNames.example_word.name]}\"
+\\paragraph{{Reference}} \"{row[DataFrameColumnNames.example_page_or_section.name]}\" of {row['reference_title_with_citation']}
+\\paragraph{{Excerpts}} \"{row[DataFrameColumnNames.example_excerpts.name]}\"
+\\paragraph{{Translation}} \"{row[DataFrameColumnNames.example_translation.name]}\"
 \\paragraph{{Description}} {row[DataFrameColumnNames.example_description_ja.name]}\\\\{row[DataFrameColumnNames.example_description_en.name]}
 """
                     )
